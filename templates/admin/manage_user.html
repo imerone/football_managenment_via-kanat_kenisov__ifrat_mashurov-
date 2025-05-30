@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Manage User{% endblock %}
+{% block content %}
+<h1>Manage User: {{ user.username }}</h1>
+<form method="POST" action="{{ url_for('admin.manage_user', id=user.id) }}">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.role.label(class="form-label") }}
+        {{ form.role(class="form-control") }}
+        {% if form.role.errors %}
+            {% for error in form.role.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3 form-check">
+        {{ form.is_blocked(class="form-check-input") }}
+        {{ form.is_blocked.label(class="form-check-label") }}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% endblock %}

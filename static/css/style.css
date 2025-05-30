@@ -1,0 +1,284 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: url('https://wallpapers.com/images/featured/uefa-background-2mxl696eobodolq3.jpg') no-repeat center center fixed;
+    background-size: cover;
+    background-blend-mode: overlay;
+    background-color: rgba(0, 0, 0, 0.8); /* adds dark overlay */
+    color: #ffffff;
+}
+
+
+/* Navbar */
+.navbar {
+    background-color: #111 !important;
+    border-bottom: 1px solid #ffffff;
+    padding: 1rem 2rem;
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #ffffff !important;
+}
+
+.nav-link {
+    color: #dddddd !important;
+    font-weight: 500;
+    margin-left: 1rem;
+    transition: color 0.3s ease;
+}
+
+.nav-link:hover {
+    color: #00cfff !important;
+}
+
+/* Container */
+.container {
+    max-width: 1200px;
+    margin: 2rem auto;
+}
+
+/* Team Card */
+.team-card {
+    background-color: rgba(30, 30, 30, 0.285);
+    border: 1px solid #ffffff;
+    color: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+}
+
+.team-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(255, 255, 255, 0.1);
+}
+
+.team-card img.team-logo {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    margin: 1rem auto;
+    display: block;
+}
+
+.team-card .card-body {
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.team-card .card-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 0.5rem;
+}
+
+.team-card .card-text {
+    font-size: 0.9rem;
+    color: #cccccc;
+    margin-bottom: 0.75rem;
+}
+
+.team-card .btn {
+    margin: 0.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    color: #ffffff;
+}
+
+.team-card .btn-primary {
+    background-color: transparent;
+    border: 1px solid #00cfff;
+}
+
+.team-card .btn-warning {
+    background-color: transparent;
+    border: 1px solid #ffaa00;
+    color: #ffaa00;
+}
+
+.team-card .btn-danger {
+    background-color: transparent;
+    border: 1px solid #ff4444;
+    color: #ff4444;
+}
+
+/* Team Detail Page */
+.team-header {
+    background: linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.85)), url('https://images.unsplash.com/photo-1518609878373-06d740f60d8b');
+    background-size: cover;
+    background-position: center;
+    color: #ffffff;
+    padding: 3rem 2rem;
+    text-align: center;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+}
+
+.team-header img {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    margin-bottom: 1rem;
+}
+
+.team-header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+}
+
+.team-header p {
+    font-size: 1.1rem;
+    color: #cccccc;
+}
+
+/* Tabs */
+.nav-tabs {
+    border-bottom: 2px solid #00cfff;
+    margin-bottom: 2rem;
+}
+
+.nav-tabs .nav-link {
+    color: #cccccc;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px 8px 0 0;
+    background-color: transparent;
+}
+
+.nav-tabs .nav-link.active {
+    background-color: #00cfff;
+    color: #ffffff;
+}
+
+.nav-tabs .nav-link:hover {
+    background-color: #003344;
+}
+
+/* Player Card */
+.player-card {
+    background-color: rgba(30, 30, 30, 0.285);
+    border: 1px solid #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+    padding: 1rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.player-card img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 50%;
+    margin-bottom: 1rem;
+    border: 2px solid #ffffff55;
+}
+
+.player-card h5 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.player-card p {
+    font-size: 0.9rem;
+    color: #aaaaaa;
+}
+
+/* Matchday Card */
+.match-card {
+    background-color: #1f1f1f;
+    border-left: 5px solid #28a745;
+    border-radius: 8px;
+    border: 1px solid #ffffff33;
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.match-card .match-info {
+    flex: 1;
+}
+
+.match-card .match-info h5 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.match-card .match-info p {
+    font-size: 0.9rem;
+    color: #cccccc;
+}
+
+.match-card .match-score {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #28a745;
+    margin: 0 1rem;
+}
+
+.match-card .match-actions .btn {
+    margin-left: 0.5rem;
+    border-radius: 8px;
+    color: #ffffff;
+    border: 1px solid #ffffff33;
+    background-color: transparent;
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: transparent;
+    color: #00cfff;
+    border: 1px solid #00cfff;
+}
+
+.btn-primary:hover {
+    background-color: #00cfff;
+    color: #000;
+}
+
+.btn-secondary {
+    background-color: transparent;
+    border: 1px solid #888;
+    color: #cccccc;
+}
+
+.btn-secondary:hover {
+    background-color: #888;
+    color: #000;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .team-header h1 {
+        font-size: 1.8rem;
+    }
+
+    .match-card {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .match-card .match-score {
+        margin: 1rem 0;
+    }
+
+    .match-card .match-actions {
+        margin-top: 1rem;
+    }
+}

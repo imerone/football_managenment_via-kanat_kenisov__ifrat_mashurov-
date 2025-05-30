@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Create Match{% endblock %}
+{% block content %}
+<div class="container_match">
+    <h1 class="title_match">Create Match</h1>
+    <div class="form_container_match">
+        <form method="POST" action="{{ url_for('match.create') }}" class="form_match">
+            {{ form.hidden_tag() }}
+            <div class="field_match">
+                {{ form.team1_id.label(class="label_match") }}
+                {{ form.team1_id(class="input_match") }}
+                {% if form.team1_id.errors %}
+                    {% for error in form.team1_id.errors %}
+                        <div class="error_match">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            <div class="field_match">
+                {{ form.team2_id.label(class="label_match") }}
+                {{ form.team2_id(class="input_match") }}
+                {% if form.team2_id.errors %}
+                    {% for error in form.team2_id.errors %}
+                        <div class="error_match">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            <div class="field_match">
+                {{ form.score.label(class="label_match") }}
+                {{ form.score(class="input_match", placeholder="e.g., 2-1") }}
+                {% if form.score.errors %}
+                    {% for error in form.score.errors %}
+                        <div class="error_match">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            <div class="field_match">
+                {{ form.date.label(class="label_match") }}
+                {{ form.date(class="input_match", type="datetime-local", value="2025-05-30T08:00") }}
+                {% if form.date.errors %}
+                    {% for error in form.date.errors %}
+                        <div class="error_match">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            <div class="actions_match">
+                <button type="button" id="predict-btn" class="btn btn-info button_match">Predict Outcome</button>
+                {{ form.submit(class="btn btn-primary button_match") }}
+            </div>
+            <div id="prediction-result" class="result_match"></div>
+        </form>
+    </div>
+</div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/match.css') }}">
+<script>
+document.getElementById('predict-btn').addEventListener('click', function() {
+    const team1_id = document.querySelector('#team1_id').value;
+    const team2_id = document.querySelector('#team2_id').value;
+    const resultDiv = document.getElementById('prediction-result');
+    if (team1_id && team2_id) {
+        resultDiv.innerHTML = '<div class="text-info">Predicting...</div>';
+        fetch(`/match/predict/${team1_id}/${team2_id}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    resultDiv.innerHTML = `<div class="error_match">${data.error}</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="success_match">${data.prediction}</div>`;
+                }
+            })
+            .catch(error => {
+                resultDiv.innerHTML = `<div class="error_match">Error fetching prediction: ${error.message}</div>`;
+            });
+    } else {
+        resultDiv.innerHTML = '<div class="error_match">Please select both teams.</div>';
+    }
+});
+</script>
+{% endblock %}

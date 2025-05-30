@@ -1,0 +1,92 @@
+% Setting up document class and essential packages
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{times}
+
+\begin{document}
+
+% Creating title page
+\title{Football Management System: End-Term Project Report}
+\author{Your Name}
+\date{May 2025}
+\maketitle
+
+% Providing abstract
+\begin{abstract}
+The Football Management System is a web-based application developed using Flask to manage football teams, players, and matches efficiently. This report details the project's objectives, features, technical implementation, and challenges encountered.
+\end{abstract}
+
+% Outlining introduction
+\section{Introduction}
+The Football Management System is a full-stack web application designed to facilitate the management of football teams, their players, and match schedules. Built with Flask, SQLAlchemy, and Bootstrap, it provides a secure and user-friendly interface for CRUD operations and user authentication.
+
+% Listing objectives
+\section{Objectives}
+\begin{itemize}
+    \item Develop a secure and user-friendly web application for football management.
+    \item Implement CRUD operations for teams, players, and matches.
+    \item Ensure secure user authentication with password hashing.
+    \item Support file uploads for player photos with validation.
+    \item Utilize Flask Blueprints for modular code organization.
+\end{itemize}
+
+% Detailing features
+\section{Features}
+\begin{itemize}
+    \item User registration and login with secure password hashing.
+    \item Team management with create, read, update, and delete (CRUD) operations.
+    \item Player management with photo uploads.
+    \item Match scheduling and search functionality.
+    \item Responsive user interface using Bootstrap 5.
+\end{itemize}
+
+% Describing database design
+\section{Database Design}
+The application uses SQLite with SQLAlchemy ORM. The database schema includes:
+\begin{itemize}
+    \item \textbf{User}: Stores user credentials (username, email, password hash).
+    \item \textbf{Team}: Stores team details, linked to a user.
+    \item \textbf{Player}: Stores player details, linked to a team.
+    \item \textbf{Match}: Stores match details, linked to two teams.
+\end{itemize}
+
+% Explaining code structure
+\section{Code Structure}
+The application is organized using Flask Blueprints for modularity:
+\begin{itemize}
+    \item \texttt{auth}: Manages user authentication (login, registration, logout).
+    \item \texttt{team}: Handles team CRUD operations.
+    \item \texttt{player}: Manages player CRUD operations and file uploads.
+    \item \texttt{match}: Manages match scheduling and search functionality.
+\end{itemize}
+Object-oriented principles are applied in models and forms.
+
+% Discussing challenges and solutions
+\section{Challenges and Solutions}
+\begin{itemize}
+    \item \textbf{Challenge}: Ensuring secure file uploads for player photos.
+    \item \textbf{Solution}: Implemented validation for file types (JPG, PNG) and size limits.
+    \item \textbf{Challenge}: Managing user sessions securely.
+    \item \textbf{Solution}: Used Flask sessions with secure cookies and expiration.
+    \item \textbf{Challenge}: Preventing unauthorized access to resources.
+    \item \textbf{Solution}: Implemented user-based access control in all blueprints.
+\end{itemize}
+
+% Summarizing conclusion
+\section{Conclusion}
+The Football Management System successfully meets all project requirements, demonstrating proficiency in Flask, SQLAlchemy, and modern web development practices. Future enhancements could include advanced analytics and multi-user collaboration features.
+
+\end{document}

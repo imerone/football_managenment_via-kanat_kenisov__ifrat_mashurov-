@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ team.name }}{% endblock %}
+{% block content %}
+<div class="team-header">
+    {% if team.logo %}
+        <img src="{{ url_for('static', filename='uploads/' + team.logo) }}" alt="{{ team.name }} Logo">
+    {% else %}
+        <img src="https://fistf.com/wp-content/uploads/2017/08/cropped-UEFA-Champions-League-Stadium-Wallpaper.jpg" alt="Placeholder Logo">
+    {% endif %}
+    <h1>{{ team.name }}</h1>
+    <p>Coach: {{ team.coach }} | Founded: {{ team.founded_year }}</p>
+</div>
+
+<ul class="nav nav-tabs">
+    <li class="nav-item">
+        <a class="nav-link active" data-bs-toggle="tab" href="#players">Players</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#matches">Matches</a>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="players">
+        <h2>Players</h2>
+        <div class="row">
+            {% for player in players %}
+            <div class="col-md-3">
+                <div class="player-card">
+                    {% if player.photo %}
+                        <img src="{{ url_for('static', filename='uploads/' + player.photo) }}" alt="{{ player.name }}">
+                    {% else %}
+                        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSulyvZc7tROd4i_Uw78U1mNeGCYczaXhu6Ug&s" alt="Placeholder Player">
+                    {% endif %}
+                    <h5>{{ player.name }}</h5>
+                    <p>Position: {{ player.position }}</p>
+                    <p>Age: {{ player.age }}</p>
+                    <a href="{{ url_for('player.edit', id=player.id) }}" class="btn btn-warning btn-sm">Edit</a>
+                    <form action="{{ url_for('player.delete', id=player.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?')">Delete</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="tab-pane fade" id="matches">
+        <h2>Matches</h2>
+        {% for match in matches %}
+        <div class="match-card">
+            <div class="match-info">
+                <h5>{{ match.team1.name }} vs {{ match.team2.name }}</h5>
+                <p>{{ match.date.strftime('%Y-%m-%d') }}</p>
+                <p>Matchday Countdown: <span>Next Match</span></p>
+            </div>
+            <div class="match-score">
+                {{ match.score or 'TBD' }}
+            </div>
+            <div class="match-actions">
+                <a href="{{ url_for('match.edit', id=match.id) }}" class="btn btn-warning btn-sm">Edit</a>
+                <form action="{{ url_for('match.delete', id=match.id) }}" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?')">Delete</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

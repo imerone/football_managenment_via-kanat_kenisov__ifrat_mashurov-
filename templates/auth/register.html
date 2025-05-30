@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Register{% endblock %}
+{% block content %}
+<section class="section_auth">
+    <div class="container_auth">
+        <div class="row_auth">
+            <div class="image_col_auth">
+                <img src="{{ url_for('static', filename='uploads/football.png') }}" 
+                    alt="Football Illustration" class="image_auth">
+            </div>
+            <div class="form_col_auth">
+                <form method="POST" action="{{ url_for('auth.register') }}" class="form_auth">
+                    {{ form.hidden_tag() }}
+                    <div class="field_auth">
+                        {{ form.username.label(class="label_auth") }}
+                        {{ form.username(class="input_auth") }}
+                        {% if form.username.errors %}
+                            {% for error in form.username.errors %}
+                                <div class="error_auth">{{ error }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    <div class="field_auth">
+                        {{ form.email.label(class="label_auth") }}
+                        {{ form.email(class="input_auth") }}
+                        {% if form.email.errors %}
+                            {% for error in form.email.errors %}
+                                <div class="error_auth">{{ error }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    <div class="field_auth">
+                        {{ form.password.label(class="label_auth") }}
+                        {{ form.password(class="input_auth") }}
+                        {% if form.password.errors %}
+                            {% for error in form.password.errors %}
+                                <div class="error_auth">{{ error }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    <div class="field_auth">
+                        {{ form.confirm_password.label(class="label_auth") }}
+                        {{ form.confirm_password(class="input_auth") }}
+                        {% if form.confirm_password.errors %}
+                            {% for error in form.confirm_password.errors %}
+                                <div class="error_auth">{{ error }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    {{ form.submit(class="btn btn-primary button_auth") }}
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+{% endblock %}

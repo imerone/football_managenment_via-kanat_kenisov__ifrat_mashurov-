@@ -1,0 +1,1106 @@
+#auth.py
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from forms import RegistrationForm, LoginForm
+from functools import wraps
+
+auth_bp = Blueprint('auth', __name__)
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in to access this page.', 'danger')
+            return redirect(url_for('auth.login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@auth_bp.route('/register', methods=['GET', 'POST'])
+def register():
+    from models import User, db
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        if User.query.filter_by(username=form.username.data).first():
+            flash('Username already exists.', 'danger')
+            return render_template('auth/register.html', form=form)
+        if User.query.filter_by(email=form.email.data).first():
+            flash('Email already exists.', 'danger')
+            return render_template('auth/register.html', form=form)
+        user = User(username=form.username.data, email=form.email.data)
+        user.set_password(form.password.data)
+        db.session.add(user)
+        db.session.commit()
+        flash('Registration successful! Please log in.', 'success')
+        return redirect(url_for('auth.login'))
+    return render_template('auth/register.html', form=form)
+
+@auth_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    from models import User, db
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(username=form.username.data).first()
+        if user and user.check_password(form.password.data):
+            session['user_id'] = user.id
+            flash('Logged in successfully!', 'success')
+            return redirect(url_for('team.dashboard'))
+        else:
+            flash('Invalid username or password.', 'danger')
+    return render_template('auth/login.html', form=form)
+
+@auth_bp.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    flash('Logged out successfully!', 'success')
+    return redirect(url_for('auth.login'))
+
+#match.py    
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from models import Match, Team, db
+from forms import MatchForm, SearchForm
+from blueprints.auth import login_required
+
+match_bp = Blueprint('match', __name__)
+
+@match_bp.route('/create', methods=['GET', 'POST'])
+@login_required
+def create():
+    form = MatchForm()
+    teams = Team.query.filter_by(user_id=session['user_id']).all()
+    form.team1_id.choices = [(team.id, team.name) for team in teams]
+    form.team2_id.choices = [(team.id, team.name) for team in teams]
+    if form.validate_on_submit():
+        if form.team1_id.data == form.team2_id.data:
+            flash('Teams cannot play against themselves.', 'danger')
+            return render_template('match/create.html', form=form, teams=teams)
+        match = Match(
+            team1_id=form.team1_id.data,
+            team2_id=form.team2_id.data,
+            score=form.score.data,
+            date=form.date.data
+        )
+        db.session.add(match)
+        db.session.commit()
+        flash('Match created successfully!', 'success')
+        return redirect(url_for('match.list'))
+    return render_template('match/create.html', form=form, teams=teams)
+
+@match_bp.route('/list')
+@login_required
+def list():
+    matches = Match.query.join(Team, Match.team1_id == Team.id).filter(Team.user_id == session['user_id']).all()
+    return render_template('match/list.html', matches=matches)
+
+@match_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit(id):
+    match = Match.query.get_or_404(id)
+    if match.team1.user_id != session['user_id']:
+        flash('Unauthorized access.', 'danger')
+        return redirect(url_for('match.list'))
+    form = MatchForm(obj=match)
+    teams = Team.query.filter_by(user_id=session['user_id']).all()
+    form.team1_id.choices = [(team.id, team.name) for team in teams]
+    form.team2_id.choices = [(team.id, team.name) for team in teams]
+    if form.validate_on_submit():
+        if form.team1_id.data == form.team2_id.data:
+            flash('Teams cannot play against themselves.', 'danger')
+            return render_template('match/edit.html', form=form, match=match, teams=teams)
+        match.team1_id = form.team1_id.data
+        match.team2_id = form.team2_id.data
+        match.score = form.score.data
+        match.date = form.date.data
+        db.session.commit()
+        flash('Match updated successfully!', 'success')
+        return redirect(url_for('match.list'))
+    return render_template('match/edit.html', form=form, match=match, teams=teams)
+
+@match_bp.route('/delete/<int:id>', methods=['POST'])
+@login_required
+def delete(id):
+    match = Match.query.get_or_404(id)
+    if match.team1.user_id != session['user_id']:
+        flash('Unauthorized access.', 'danger')
+        return redirect(url_for('match.list'))
+    db.session.delete(match)
+    db.session.commit()
+    flash('Match deleted successfully!', 'success')
+    return redirect(url_for('match.list'))
+
+@match_bp.route('/search', methods=['GET', 'POST'])
+@login_required
+def search():
+    form = SearchForm()
+    matches = []
+    if form.validate_on_submit():
+        query = f"%{form.query.data}%"
+        matches = Match.query.join(Team, Match.team1_id == Team.id).filter(
+            (Team.user_id == session['user_id']) & 
+            ((Team.name.ilike(query)) | (Match.score.ilike(query)))
+        ).all()
+    return render_template('match/search.html', form=form, matches=matches)
+
+#player.py
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from models import Player, Team, db
+from forms import PlayerForm
+from blueprints.auth import login_required
+import os
+from werkzeug.utils import secure_filename
+from flask import current_app
+
+player_bp = Blueprint('player', __name__)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'jpg', 'png'}
+
+@player_bp.route('/create/<int:team_id>', methods=['GET', 'POST'])
+@login_required
+def create(team_id):
+    team = Team.query.get_or_404(team_id)
+    if team.user_id != session['user_id']:
+        flash('Unauthorized access.', 'danger')
+        return redirect(url_for('team.dashboard'))
+    form = PlayerForm()
+    if form.validate_on_submit():
+        player = Player(
+            name=form.name.data,
+            position=form.position.data,
+            age=form.age.data,
+            team_id=team_id
+        )
+        if form.photo.data:
+            if allowed_file(form.photo.data.filename):
+                filename = secure_filename(form.photo.data.filename)
+                filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+                form.photo.data.save(filepath)
+                player.photo = filename
+            else:
+                flash('Invalid file type. Only JPG and PNG allowed.', 'danger')
+                return render_template('player/create.html', form=form, team=team)
+        db.session.add(player)
+        db.session.commit()
+        flash('Player created successfully!', 'success')
+        return redirect(url_for('team.dashboard'))
+    return render_template('player/create.html', form=form, team=team)
+
+@player_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit(id):
+    player = Player.query.get_or_404(id)
+    if player.team.user_id != session['user_id']:
+        flash('Unauthorized access.', 'danger')
+        return redirect(url_for('team.dashboard'))
+    form = PlayerForm(obj=player)
+    if form.validate_on_submit():
+        player.name = form.name.data
+        player.position = form.position.data
+        player.age = form.age.data
+        if form.photo.data:
+            if allowed_file(form.photo.data.filename):
+                filename = secure_filename(form.photo.data.filename)
+                filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+                form.photo.data.save(filepath)
+                player.photo = filename
+            else:
+                flash('Invalid file type. Only JPG and PNG allowed.', 'danger')
+                return render_template('player/edit.html', form=form, player=player)
+        db.session.commit()
+        flash('Player updated successfully!', 'success')
+        return redirect(url_for('team.dashboard'))
+    return render_template('player/edit.html', form=form, player=player)
+
+@player_bp.route('/delete/<int:id>', methods=['POST'])
+@login_required
+def delete(id):
+    player = Player.query.get_or_404(id)
+    if player.team.user_id != session['user_id']:
+        flash('Unauthorized access.', 'danger')
+        return redirect(url_for('team.dashboard'))
+    db.session.delete(player)
+    db.session.commit()
+    flash('Player deleted successfully!', 'success')
+    return redirect(url_for('team.dashboard'))  
+
+#team.py
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from forms import TeamForm
+from blueprints.auth import login_required
+from models import Team, Player, Match, db
+import os
+from werkzeug.utils import secure_filename
+from flask import current_app
+
+team_bp = Blueprint('team', __name__)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'jpg', 'png'}
+
+@team_bp.route('/dashboard')
+@login_required
+def dashboard():
+    teams = Team.query.filter_by(user_id=session['user_id']).all()
+    return render_template('team/dashboard.html', teams=teams)
+
+@team_bp.route('/create', methods=['GET', 'POST'])
+@login_required
+def create():
+    form = TeamForm()
+    if form.validate_on_submit():
+        team = Team(
+            name=form.name.data,
+            coach=form.coach.data,
+            founded_year=form.founded_year.data,
+            user_id=session['user_id']
+        )
+        if form.logo.data:
+            if allowed_file(form.logo.data.filename):
+                filename = secure_filename(form.logo.data.filename)
+                filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+                form.logo.data.save(filepath)
+                team.logo = filename
+            else:
+                flash('Invalid file type. Only JPG and PNG allowed.', 'danger')
+                return render_template('team/create.html', form=form)
+        db.session.add(team)
+        db.session.commit()
+        flash('Team created successfully!', 'success')
+        return redirect(url_for('team.dashboard'))
+    return render_template('team/create.html', form=form)
+
+@team_bp.route('/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit(id):
+    team = Team.query.get_or_404(id)
+    if team.user_id != session['user_id']:
+        flash('Unauthorized access.', 'danger')
+        return redirect(url_for('team.dashboard'))
+    form = TeamForm(obj=team)
+    if form.validate_on_submit():
+        team.name = form.name.data
+        team.coach = form.coach.data
+        team.founded_year = form.founded_year.data
+        if form.logo.data:
+            if allowed_file(form.logo.data.filename):
+                filename = secure_filename(form.logo.data.filename)
+                filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+                form.logo.data.save(filepath)
+                team.logo = filename
+            else:
+                flash('Invalid file type. Only JPG and PNG allowed.', 'danger')
+                return render_template('team/edit.html', form=form, team=team)
+        db.session.commit()
+        flash('Team updated successfully!', 'success')
+        return redirect(url_for('team.dashboard'))
+    return render_template('team/edit.html', form=form, team=team)
+
+@team_bp.route('/delete/<int:id>', methods=['POST'])
+@login_required
+def delete(id):
+    team = Team.query.get_or_404(id)
+    if team.user_id != session['user_id']:
+        flash('Unauthorized access.', 'danger')
+        return redirect(url_for('team.dashboard'))
+    db.session.delete(team)
+    db.session.commit()
+    flash('Team deleted successfully!', 'success')
+    return redirect(url_for('team.dashboard'))
+
+@team_bp.route('/view/<int:id>')
+@login_required
+def view(id):
+    team = Team.query.get_or_404(id)
+    if team.user_id != session['user_id']:
+        flash('Unauthorized access.', 'danger')
+        return redirect(url_for('team.dashboard'))
+    players = Player.query.filter_by(team_id=id).all()
+    matches = Match.query.filter((Match.team1_id == id) | (Match.team2_id == id)).all()
+    return render_template('team/view.html', team=team, players=players, matches=matches)  
+
+#auth/login.html
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<h1>Login</h1>
+<form method="POST" action="{{ url_for('auth.login') }}">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.username.label(class="form-label") }}
+        {{ form.username(class="form-control") }}
+        {% if form.username.errors %}
+            {% for error in form.username.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.password.label(class="form-label") }}
+        {{ form.password(class="form-control") }}
+        {% if form.password.errors %}
+            {% for error in form.password.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3 form-check">
+        {{ form.remember(class="form-check-input") }}
+        {{ form.remember.label(class="form-check-label") }}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+<p class="mt-3">Don't have an account? <a href="{{ url_for('auth.register') }}">Register</a></p>
+{% endblock %}  
+
+#auth/register.html
+{% extends "base.html" %}
+{% block title %}Register{% endblock %}
+{% block content %}
+<h1>Register</h1>
+<form method="POST" action="{{ url_for('auth.register') }}">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.username.label(class="form-label") }}
+        {{ form.username(class="form-control") }}
+        {% if form.username.errors %}
+            {% for error in form.username.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.email.label(class="form-label") }}
+        {{ form.email(class="form-control") }}
+        {% if form.email.errors %}
+            {% for error in form.email.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.password.label(class="form-label") }}
+        {{ form.password(class="form-control") }}
+        {% if form.password.errors %}
+            {% for error in form.password.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.confirm_password.label(class="form-label") }}
+        {{ form.confirm_password(class="form-control") }}
+        {% if form.confirm_password.errors %}
+            {% for error in form.confirm_password.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+<p class="mt-3">Already have an account? <a href="{{ url_for('auth.login') }}">Login</a></p>
+{% endblock %}
+
+#match/cretae.html
+{% extends "base.html" %}
+{% block title %}Create Match{% endblock %}
+{% block content %}
+<h1>Create Match</h1>
+<form method="POST" action="{{ url_for('match.create') }}">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.team1_id.label(class="form-label") }}
+        {{ form.team1_id(class="form-control") }}
+        {% if form.team1_id.errors %}
+            {% for error in form.team1_id.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.team2_id.label(class="form-label") }}
+        {{ form.team2_id(class="form-control") }}
+        {% if form.team2_id.errors %}
+            {% for error in form.team2_id.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.score.label(class="form-label") }}
+        {{ form.score(class="form-control") }}
+        {% if form.score.errors %}
+            {% for error in form.score.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.date.label(class="form-label") }}
+        {{ form.date(class="form-control", type="date") }}
+        {% if form.date.errors %}
+            {% for error in form.date.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% endblock %}
+
+#match/edit.html
+{% extends "base.html" %}
+{% block title %}Edit Match{% endblock %}
+{% block content %}
+<h1>Edit Match</h1>
+<form method="POST" action="{{ url_for('match.edit', id=match.id) }}">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.team1_id.label(class="form-label") }}
+        {{ form.team1_id(class="form-control") }}
+        {% if form.team1_id.errors %}
+            {% for error in form.team1_id.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.team2_id.label(class="form-label") }}
+        {{ form.team2_id(class="form-control") }}
+        {% if form.team2_id.errors %}
+            {% for error in form.team2_id.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.score.label(class="form-label") }}
+        {{ form.score(class="form-control") }}
+        {% if form.score.errors %}
+            {% for error in form.score.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.date.label(class="form-label") }}
+        {{ form.date(class="form-control", type="date") }}
+        {% if form.date.errors %}
+            {% for error in form.date.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% endblock %}
+
+
+#match/list.html
+{% extends "base.html" %}
+{% block title %}Matches{% endblock %}
+{% block content %}
+<h1>Matches</h1>
+<a href="{{ url_for('match.create') }}" class="btn btn-primary mb-3">Create Match</a>
+<a href="{{ url_for('match.search') }}" class="btn btn-secondary mb-3">Search Matches</a>
+<div>
+    {% for match in matches %}
+    <div class="match-card">
+        <div class="match-info">
+            <h5>{{ match.team1.name }} vs {{ match.team2.name }}</h5>
+            <p>{{ match.date.strftime('%Y-%m-%d') }}</p>
+            <p>Matchday Countdown: <span>Next Match</span></p>
+        </div>
+        <div class="match-score">
+            {{ match.score or 'TBD' }}
+        </div>
+        <div class="match-actions">
+            <a href="{{ url_for('match.edit', id=match.id) }}" class="btn btn-warning btn-sm">Edit</a>
+            <form action="{{ url_for('match.delete', id=match.id) }}" method="POST" style="display:inline;">
+                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?')">Delete</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+
+#match/search.html
+{% extends "base.html" %}
+{% block title %}Search Matches{% endblock %}
+{% block content %}
+<h1>Search Matches</h1>
+<form method="POST" action="{{ url_for('match.search') }}">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.query.label(class="form-label") }}
+        {{ form.query(class="form-control") }}
+        {% if form.query.errors %}
+            {% for error in form.query.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% if matches %}
+<h2>Search Results</h2>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Team 1</th>
+            <th>Team 2</th>
+            <th>Score</th>
+            <th>Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for match in matches %}
+        <tr>
+            <td>{{ match.team1.name }}</td>
+            <td>{{ match.team2.name }}</td>
+            <td>{{ match.score or 'N/A' }}</td>
+            <td>{{ match.date.strftime('%Y-%m-%d') }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}
+
+
+
+#player/create.html
+{% extends "base.html" %}
+{% block title %}Create Player{% endblock %}
+{% block content %}
+<h1>Create Player for {{ team.name }}</h1>
+<form method="POST" action="{{ url_for('player.create', team_id=team.id) }}" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.name.label(class="form-label") }}
+        {{ form.name(class="form-control") }}
+        {% if form.name.errors %}
+            {% for error in form.name.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.position.label(class="form-label") }}
+        {{ form.position(class="form-control") }}
+        {% if form.position.errors %}
+            {% for error in form.position.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.age.label(class="form-label") }}
+        {{ form.age(class="form-control") }}
+        {% if form.age.errors %}
+            {% for error in form.age.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.photo.label(class="form-label") }}
+        {{ form.photo(class="form-control") }}
+        {% if form.photo.errors %}
+            {% for error in form.photo.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% endblock %}
+
+
+
+#player/edit.html
+{% extends "base.html" %}
+{% block title %}Edit Player{% endblock %}
+{% block content %}
+<h1>Edit Player</h1>
+<form method="POST" action="{{ url_for('player.edit', id=player.id) }}" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.name.label(class="form-label") }}
+        {{ form.name(class="form-control") }}
+        {% if form.name.errors %}
+            {% for error in form.name.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.position.label(class="form-label") }}
+        {{ form.position(class="form-control") }}
+        {% if form.position.errors %}
+            {% for error in form.position.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.age.label(class="form-label") }}
+        {{ form.age(class="form-control") }}
+        {% if form.age.errors %}
+            {% for error in form.age.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.photo.label(class="form-label") }}
+        {{ form.photo(class="form-control") }}
+        {% if form.photo.errors %}
+            {% for error in form.photo.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% endblock %}
+
+
+
+#team/create.html
+{% extends "base.html" %}
+{% block title %}Create Team{% endblock %}
+{% block content %}
+<h1>Create Team</h1>
+<form method="POST" action="{{ url_for('team.create') }}" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.name.label(class="form-label") }}
+        {{ form.name(class="form-control") }}
+        {% if form.name.errors %}
+            {% for error in form.name.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.coach.label(class="form-label") }}
+        {{ form.coach(class="form-control") }}
+        {% if form.coach.errors %}
+            {% for error in form.coach.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.founded_year.label(class="form-label") }}
+        {{ form.founded_year(class="form-control") }}
+        {% if form.founded_year.errors %}
+            {% for error in form.founded_year.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.logo.label(class="form-label") }}
+        {{ form.logo(class="form-control") }}
+        {% if form.logo.errors %}
+            {% for error in form.logo.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% endblock %}
+
+
+#team/dashboard.html
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Your Teams</h1>
+<a href="{{ url_for('team.create') }}" class="btn btn-primary mb-3">Create Team</a>
+<div class="row">
+    {% for team in teams %}
+    <div class="col-md-4 mb-3">
+        <a href="{{ url_for('team.view', id=team.id) }}" style="text-decoration: none;">
+            <div class="team-card">
+                {% if team.logo %}
+                    <img src="{{ url_for('static', filename='uploads/' + team.logo) }}" alt="{{ team.name }} Logo" class="team-logo">
+                {% else %}
+                    <img src="https://images.unsplash.com/photo-1518609878373-06d740f60d8b" alt="Placeholder Logo" class="team-logo">
+                {% endif %}
+                <div class="card-body">
+                    <h5 class="card-title">{{ team.name }}</h5>
+                    <p class="card-text">Coach: {{ team.coach }}</p>
+                    <p class="card-text">Founded: {{ team.founded_year }}</p>
+                    <p class="card-text">Players: {{ team.players | length }}</p>
+                    <a href="{{ url_for('player.create', team_id=team.id) }}" class="btn btn-secondary">Add Player</a>
+                    <a href="{{ url_for('team.edit', id=team.id) }}" class="btn btn-warning">Edit</a>
+                    <form action="{{ url_for('team.delete', id=team.id) }}" method="POST" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure?')">Delete</button>
+</form>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+
+#team/edit.html
+{% extends "base.html" %}
+{% block title %}Edit Team{% endblock %}
+{% block content %}
+<h1>Edit Team</h1>
+<form method="POST" action="{{ url_for('team.edit', id=team.id) }}" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.name.label(class="form-label") }}
+        {{ form.name(class="form-control") }}
+        {% if form.name.errors %}
+            {% for error in form.name.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.coach.label(class="form-label") }}
+        {{ form.coach(class="form-control") }}
+        {% if form.coach.errors %}
+            {% for error in form.coach.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.founded_year.label(class="form-label") }}
+        {{ form.founded_year(class="form-control") }}
+        {% if form.founded_year.errors %}
+            {% for error in form.founded_year.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.logo.label(class="form-label") }}
+        {{ form.logo(class="form-control") }}
+        {% if form.logo.errors %}
+            {% for error in form.logo.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+        {% if team.logo %}
+            <p>Current Logo: <img src="{{ url_for('static', filename='uploads/' + team.logo) }}" alt="Current Logo" style="width: 100px; height: 100px;"></p>
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% endblock %}
+
+
+
+#team/view.html
+{% extends "base.html" %}
+{% block title %}{{ team.name }}{% endblock %}
+{% block content %}
+<div class="team-header">
+    {% if team.logo %}
+        <img src="{{ url_for('static', filename='uploads/' + team.logo) }}" alt="{{ team.name }} Logo">
+    {% else %}
+        <img src="https://fistf.com/wp-content/uploads/2017/08/cropped-UEFA-Champions-League-Stadium-Wallpaper.jpg" alt="Placeholder Logo">
+    {% endif %}
+    <h1>{{ team.name }}</h1>
+    <p>Coach: {{ team.coach }} | Founded: {{ team.founded_year }}</p>
+</div>
+
+<ul class="nav nav-tabs">
+    <li class="nav-item">
+        <a class="nav-link active" data-bs-toggle="tab" href="#players">Players</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#matches">Matches</a>
+    </li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="players">
+        <h2>Players</h2>
+        <div class="row">
+            {% for player in players %}
+            <div class="col-md-3">
+                <div class="player-card">
+                    {% if player.photo %}
+                        <img src="{{ url_for('static', filename='uploads/' + player.photo) }}" alt="{{ player.name }}">
+                    {% else %}
+                        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSulyvZc7tROd4i_Uw78U1mNeGCYczaXhu6Ug&s" alt="Placeholder Player">
+                    {% endif %}
+                    <h5>{{ player.name }}</h5>
+                    <p>Position: {{ player.position }}</p>
+                    <p>Age: {{ player.age }}</p>
+                    <a href="{{ url_for('player.edit', id=player.id) }}" class="btn btn-warning btn-sm">Edit</a>
+                    <form action="{{ url_for('player.delete', id=player.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?')">Delete</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="tab-pane fade" id="matches">
+        <h2>Matches</h2>
+        {% for match in matches %}
+        <div class="match-card">
+            <div class="match-info">
+                <h5>{{ match.team1.name }} vs {{ match.team2.name }}</h5>
+                <p>{{ match.date.strftime('%Y-%m-%d') }}</p>
+                <p>Matchday Countdown: <span>Next Match</span></p>
+            </div>
+            <div class="match-score">
+                {{ match.score or 'TBD' }}
+            </div>
+            <div class="match-actions">
+                <a href="{{ url_for('match.edit', id=match.id) }}" class="btn btn-warning btn-sm">Edit</a>
+                <form action="{{ url_for('match.delete', id=match.id) }}" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?')">Delete</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+
+#base.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Football Management System{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('team.dashboard') }}">Football Manager</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if session.user_id %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('team.dashboard') }}">Dashboard</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('match.list') }}">Matches</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('auth.login') }}">Login</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('auth.register') }}">Register</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+
+#app.py
+from flask import Flask, redirect, url_for
+from dotenv import load_dotenv
+from init import init_app
+
+from flask_wtf.csrf import CSRFProtect
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = '7f8e9d0c1b2a3f4e5d6c7b8a9f0e1d2c' 
+csrf = CSRFProtect(app)
+
+load_dotenv()
+app = Flask(__name__)
+
+init_app(app)
+
+@app.route('/')
+def index():
+    return redirect(url_for('auth.login'))
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
+
+
+#force_db.py
+# force_db.py
+from init import db
+from app import app
+with app.app_context():
+    db.drop_all()
+    db.create_all()
+    print("Database recreated successfully.")  
+
+#forms.py    
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, IntegerField, SubmitField, FileField, DateField, BooleanField, SelectField
+from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange
+from flask_wtf.file import FileAllowed
+
+class RegistrationForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=4, max=80)])
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
+    submit = SubmitField('Register')
+
+class LoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    remember = BooleanField('Remember Me')
+    submit = SubmitField('Login')
+
+class TeamForm(FlaskForm):
+    name = StringField('Team Name', validators=[DataRequired(), Length(max=100)])
+    coach = StringField('Coach', validators=[DataRequired(), Length(max=100)])
+    founded_year = IntegerField('Founded Year', validators=[DataRequired(), NumberRange(min=1800, max=2025)])
+    logo = FileField('Team Logo', validators=[FileAllowed(['jpg', 'png'], 'Images only!')])
+    submit = SubmitField('Save')
+
+class PlayerForm(FlaskForm):
+    name = StringField('Player Name', validators=[DataRequired(), Length(max=100)])
+    position = StringField('Position', validators=[DataRequired(), Length(max=50)])
+    age = IntegerField('Age', validators=[DataRequired(), NumberRange(min=15, max=50)])
+    photo = FileField('Photo', validators=[FileAllowed(['jpg', 'png'], 'Images only!')])
+    submit = SubmitField('Save')
+
+class MatchForm(FlaskForm):
+    team1_id = SelectField('Team 1', coerce=int, validators=[DataRequired()])
+    team2_id = SelectField('Team 2', coerce=int, validators=[DataRequired()])
+    score = StringField('Score', validators=[Length(max=10)])
+    date = DateField('Match Date', validators=[DataRequired()])
+    submit = SubmitField('Save')
+
+class SearchForm(FlaskForm):
+    query = StringField('Search', validators=[DataRequired()])
+    submit = SubmitField('Search')
+
+#init.py
+    from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
+from flask_migrate import Migrate
+import os
+
+db = SQLAlchemy()
+csrf = CSRFProtect()
+migrate = Migrate()
+
+def init_app(app):
+    app.config['SECRET_KEY'] = '7f8e9d0c1b2a3f4e5d6c7b8a9f0e1d2c'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///football.db'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'static/uploads')
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['PERMANENT_SESSION_LIFETIME'] = 1800
+
+    db.init_app(app)
+    csrf.init_app(app)
+    migrate.init_app(app, db)
+
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+    from blueprints.auth import auth_bp
+    from blueprints.team import team_bp
+    from blueprints.player import player_bp
+    from blueprints.match import match_bp
+
+    app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(team_bp, url_prefix='/team')
+    app.register_blueprint(player_bp, url_prefix='/player')
+    app.register_blueprint(match_bp, url_prefix='/match')
+
+    with app.app_context():
+        db.create_all() 
+
+#models.py
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+from init import db
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+class Team(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    coach = db.Column(db.String(100), nullable=False)
+    founded_year = db.Column(db.Integer, nullable=False)
+    logo = db.Column(db.String(200), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('teams', lazy=True))
+    players = db.relationship('Player', backref='team', lazy=True)
+
+class Player(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    position = db.Column(db.String(50), nullable=False)
+    age = db.Column(db.Integer, nullable=False)
+    photo = db.Column(db.String(200), nullable=True)
+    team_id = db.Column(db.Integer, db.ForeignKey('team.id', ondelete='CASCADE'), nullable=False)
+class Match(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    team1_id = db.Column(db.Integer, db.ForeignKey('team.id'), nullable=False)
+    team2_id = db.Column(db.Integer, db.ForeignKey('team.id'), nullable=False)
+    score = db.Column(db.String(10), nullable=True)
+    date = db.Column(db.DateTime, nullable=False)
+    team1 = db.relationship('Team', foreign_keys=[team1_id])
+    team2 = db.relationship('Team', foreign_keys=[team2_id])
+
+
+#requirments.text
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.5
+Flask-WTF==1.2.1
+Werkzeug==3.0.1
+python-dotenv==1.0.1
+Flask-Migrate==4.0.7  

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Edit Match{% endblock %}
+{% block content %}
+<h1>Edit Match</h1>
+<form method="POST" action="{{ url_for('match.edit', id=match.id) }}">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.team1_id.label(class="form-label") }}
+        {{ form.team1_id(class="form-control") }}
+        {% if form.team1_id.errors %}
+            {% for error in form.team1_id.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.team2_id.label(class="form-label") }}
+        {{ form.team2_id(class="form-control") }}
+        {% if form.team2_id.errors %}
+            {% for error in form.team2_id.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.score.label(class="form-label") }}
+        {{ form.score(class="form-control") }}
+        {% if form.score.errors %}
+            {% for error in form.score.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        {{ form.date.label(class="form-label") }}
+        {{ form.date(class="form-control", type="date") }}
+        {% if form.date.errors %}
+            {% for error in form.date.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% endblock %}

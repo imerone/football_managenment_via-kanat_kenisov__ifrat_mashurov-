@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Search Matches{% endblock %}
+{% block content %}
+<h1>Search Matches</h1>
+<form method="POST" action="{{ url_for('match.search') }}">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+        {{ form.query.label(class="form-label") }}
+        {{ form.query(class="form-control") }}
+        {% if form.query.errors %}
+            {% for error in form.query.errors %}
+                <div class="text-danger">{{ error }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+    {{ form.submit(class="btn btn-primary") }}
+</form>
+{% if matches %}
+<h2>Search Results</h2>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Team 1</th>
+            <th>Team 2</th>
+            <th>Score</th>
+            <th>Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for match in matches %}
+        <tr>
+            <td>{{ match.team1.name }}</td>
+            <td>{{ match.team2.name }}</td>
+            <td>{{ match.score or 'N/A' }}</td>
+            <td>{{ match.date.strftime('%Y-%m-%d') }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}

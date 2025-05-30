@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Matches{% endblock %}
+{% block content %}
+<div class="container_match">
+    <h1 class="title_match">Upcoming Matches</h1>
+    <div class="actions_match">
+        <a href="{{ url_for('match.create') }}" class="btn btn-primary button_match">Create Match</a>
+        <a href="{{ url_for('match.search') }}" class="btn btn-secondary button_match">Search Matches</a>
+    </div>
+    <div class="matches_container_match">
+        {% for match in matches %}
+        <div class="poster_match">
+            <div class="body_match">
+                <div class="team_section_match team_left_match">
+                    <img src="{% if match.team1.logo %}{{ url_for('static', filename='uploads/' + match.team1.logo) }}{% else %}https://images.unsplash.com/photo-1518609878373-06d740f60d8b{% endif %}" 
+                         alt="{{ match.team1.name }} Logo" class="logo_match">
+                    <h4 class="name_match">{{ match.team1.name }}</h4>
+                </div>
+                <div class="details_match">
+                    <h3 class="score_match">{{ match.score or 'TBD' }}</h3>
+                    <p class="vs_text_match">VS</p>
+                    <p class="date_match">{{ match.date.strftime('%Y-%m-%d %H:%M') }}</p>
+                    <p class="countdown_match">
+                        {% if match.days_until %}
+                            {{ match.days_until }} day{% if match.days_until != 1 %}s{% endif %} until match
+                        {% else %}
+                            Next Match
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="team_section_match team_right_match">
+                    <h4 class="name_match">{{ match.team2.name }}</h4>
+                    <img src="{% if match.team2.logo %}{{ url_for('static', filename='uploads/' + match.team2.logo) }}{% else %}https://images.unsplash.com/photo-1518609878373-06d740f60d8b{% endif %}" 
+                         alt="{{ match.team2.name }} Logo" class="logo_match">
+                </div>
+                <div class="actions_match actions_poster_match">
+                    <a href="{{ url_for('match.edit', id=match.id) }}" class="btn btn-warning button_match button_edit_match">Edit</a>
+                    <form action="{{ url_for('match.delete', id=match.id) }}" method="POST" class="form_match">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger button_match button_delete_match" onclick="return confirm('Are you sure you want to delete this match?')">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/match.css') }}">
+{% endblock %}
